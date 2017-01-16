@@ -1,0 +1,26 @@
+[general]
+creator=R package 'raster'
+created=2017-01-13 16:44:43
+[georeference]
+nrows=129
+ncols=237
+xmin=606910.4658
+ymin=3916269.40873688
+xmax=612835.4658
+ymax=3919494.40873688
+projection=+proj=utm +zone=19 +south +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0
+[data]
+datatype=FLT8S
+byteorder=little
+nbands=1
+bandorder=BIL
+categorical=FALSE
+minvalue=1
+maxvalue=15
+nodatavalue=-1.7e+308
+[legend]
+legendtype=
+values=
+color=
+[description]
+layername=cost

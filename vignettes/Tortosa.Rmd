@@ -1,0 +1,275 @@
+---
+title: "Cost-based cluster analysis of Tortosa settlements"
+author: "Facundo Muñoz"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Tortosa}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, message = FALSE, warning = FALSE}
+require(tidyr)
+require(dplyr)
+require(raster)
+require(geoRcb)
+require(sp)
+require(spatstat)
+require(ggplot2)
+require(viridis)
+require(cbK)
+theme_set(theme_bw())
+```
+
+
+
+# Introduction
+
+This vignette presents the results of the analysis for two contrasted historical periods from the same region. In the first case we provide step by step details while in the second we use the function `cbK()` included in the package, who wraps up all the calculations.
+
+
+## Cost surface
+
+```{r read-raster, include = FALSE}
+## The locations are LazyLoaded with the package
+## If you had yourself a shapefile, for example, you 
+## would do something like
+# basename <- "roman_settlements"
+# pts <- rgdal::readOGR(dsn = path, layer = basename)
+
+## The cost surface is provided with the package as a
+## separate raster file
+dn <- system.file("extdata", package="cbK")
+tortosa_cs <- raster(file.path(dn, "tortosa_cs"))
+```
+
+
+The cost surface is relatively high-res with `r round(ncell(tortosa_cs)/1e6, 1)` M
+pixels, although more than half of them are `NA`s.
+
+There seem to be some pixels with outlying cost values (an order of magnitude 
+higher). These have been filtered in the surface plot.
+
+```{r exploration, fig.width = 5}
+with(
+    list(x = getValues(tortosa_cs)),
+  {
+    boxplot(x, horizontal = TRUE)
+    print(summary(x[x > 200]))
+    print(summary(x[x < 1e3]))
+  }
+)
+```
+
+
+```{r cost-surface-plot, fig.width = 6, fig.height = 4}
+data.frame(
+  coordinates(tortosa_cs),
+  cost = getValues(tortosa_cs)
+) %>%                                                             
+  filter(cost < 1e3) %>% 
+  ggplot(aes(x, y)) +
+  geom_raster(aes(fill = cost)) +
+  geom_point(
+    data = suppressWarnings(
+      bind_rows(
+        Roman = as.data.frame(roman_settlements),
+        Caliphate = as.data.frame(caliphate_settlements),
+        .id = "period"
+      )
+    ),
+    aes(coords.x1, coords.x2, col = period)) +
+  scale_fill_viridis() +
+  coord_fixed()
+
+```
+
+
+# Roman imperial period
+
+
+## Computation of the cost-based distance matrix
+
+We prefer to work in terms of conductivity (i.e. inverse-cost).
+We write the raster to disk to keep it off-memory.
+
+```{r conductivity-surface}
+cond <- writeRaster(1/tortosa_cs, filename=tempfile())
+```
+
+This operation is moderately heavy, since the conductivity surface is a raster 
+with 14+ M cells. Here we are computing a sparse matrix of size ~ 14 M $\times$ 
+14 M. Using `directions = 16` has been problematic for my desktop PC with 16 Gb 
+RAM.
+
+```{r compute-distance-matrix}
+dm <- distmatGen(roman_settlements, cond, ret = "obs", directions = 8)
+```
+
+
+## Multi-Dimensional Scaling
+
+```{r MDS}
+fit <- cmdscale(dm, k =2, eig = TRUE)
+```
+
+In this example, the 2D MDS representation captures the `r round(fit$GOF[1]*100, 1)`
+ % of the variability in the cost-based distances.
+ 
+
+## Ripley's $K$ function
+
+First, we need to set up the fitted coordinates as an object of spatial point
+pattern (ppp) class.
+
+```{r setup-point-pattern}
+cb_pp <- ppp(
+  x = fit$points[, 1],
+  y = fit$points[, 2],
+  xrange = range(fit$points[, 1]),
+  yrange = range(fit$points[, 2])
+)
+
+```
+
+Then we can compute Ripley's $K$ function, and a Monte Carlo envelope
+for significance testing.
+
+```{r ripleys-k, fig.width=5, fig.height=5}
+(K <- Kest(cb_pp))
+plot(K)
+E <- envelope(cb_pp, Kest, verbose = FALSE)
+plot(E)
+```
+
+
+Or, its stabilized transformation: the $L$ function
+
+```{r L-function, fig.width=5, fig.height=5}
+L <- Lest(cb_pp)
+plot(L)
+E <- envelope(cb_pp, Lest, verbose = FALSE)
+plot(E)
+```
+
+
+
+## Comparison with Euclidean distances
+
+The cost-based distances are an order of magnitude higher than the
+Euclidean distances.
+
+```{r dist-compare, fig.width=5, fig.height=5}
+eucl_dm <- dist(coordinates(roman_settlements))
+data.frame(
+  eucl = unclass(eucl_dm),
+  cb = dm[lower.tri(dm)]
+) %>% 
+  ggplot(aes(eucl, cb)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, col = 'darkgray')
+```
+
+
+We can also compute $K$ and $L$ functions with euclidean coordinates for
+reference.
+
+```{r euclidean-K-L, fig.width=5, fig.height=5}
+eu_pp <- ppp(
+  x = coordinates(roman_settlements)[, 1],
+  y = coordinates(roman_settlements)[, 2],
+  xrange = range(coordinates(roman_settlements)[, 1]),
+  yrange = range(coordinates(roman_settlements)[, 2])
+)
+K_eu <- Kest(eu_pp)
+plot(K_eu)
+E_eu <- envelope(eu_pp, Kest, verbose = FALSE)
+plot(E_eu)
+
+L_eu <- Lest(eu_pp)
+plot(L_eu)
+E_eu <- envelope(eu_pp, Lest, verbose = FALSE)
+plot(E_eu)
+
+```
+
+
+
+## Conclusions from the first example
+
+- The cost-based approach reveals a strong depart from homogeneity
+
+
+
+# Caliphate period
+
+The previous computations can be wrapped within one convenience function which
+takes a `SpatialPoints` object and a `raster` surface as inputs, and computes all
+these results in one step.
+
+This function is provided in this package under the name of `cbK()` (see its 
+help page).
+
+```{r caliphate-results}
+phase4 <- cbK(
+  loc = caliphate_settlements,
+  cs  = tortosa_cs,
+  directions = 8
+)
+
+```
+
+
+
+## Multi-Dimensional Scaling
+
+In this case, the 2D MDS representation captures the `r round(phase4$mds$GOF[1]*100, 1)`
+ % of the variability in the cost-based distances.
+ 
+
+## Ripley's $K$ function
+
+```{r phase4-ripleys-k, fig.width=5, fig.height=5}
+plot(phase4$K)
+plot(phase4$env_K)
+```
+
+
+Or, its stabilized transformation: the $L$ function
+
+```{r phase4-L-function, fig.width=5, fig.height=5}
+plot(phase4$L)
+plot(phase4$env_L)
+```
+
+
+
+## Comparison with Euclidean distances
+
+The cost-based distances are an order of magnitude higher than the
+Euclidean distances.
+
+```{r phase4-dist-compare, fig.width=5, fig.height=5}
+data.frame(
+  eucl = unclass(phase4$eucl$dm),
+  cb = phase4$dm[lower.tri(phase4$dm)]
+) %>% 
+  ggplot(aes(eucl, cb)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, col = 'darkgray')
+```
+
+
+For reference, we have also computed $K$ and $L$ functions with euclidean coordinates.
+
+```{r phase4-euclidean-K-L, fig.width=5, fig.height=5}
+plot(phase4$eucl$K)
+plot(phase4$eucl$env_K)
+
+plot(phase4$eucl$L)
+plot(phase4$eucl$env_L)
+
+```
+
+

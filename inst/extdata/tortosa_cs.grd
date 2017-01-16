@@ -1,0 +1,26 @@
+[general]
+creator=R package 'raster'
+created=2017-01-13 16:35:39
+[georeference]
+nrows=3625
+ncols=3952
+xmin=260303.4839
+ymin=4489028.9029148
+xmax=319583.4839
+ymax=4543403.9029148
+projection=+proj=utm +zone=31 +ellps=intl +units=m +no_defs
+[data]
+datatype=FLT8S
+byteorder=little
+nbands=1
+bandorder=BIL
+categorical=FALSE
+minvalue=1
+maxvalue=5400
+nodatavalue=-1.7e+308
+[legend]
+legendtype=
+values=
+color=
+[description]
+layername=cost_surf

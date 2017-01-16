@@ -1,0 +1,32 @@
+Package: cbK
+Type: Package
+Title: Cost-based Clustering Analysis of Human Settlements
+Version: 1.0-0
+Author: Facundo Muñoz
+Author: Facundo Muñoz [aut, cre],
+  Joan Negre [ctb]
+Maintainer: Facundo Muñoz <facundo.munoz@orleans.inra.fr>
+Description: The package contains locations of agricultural settlements near
+    the village of Tortosa (Tarragona, Catalonia, Spain) in two different
+    historical periods and of indigenous societies settled on the Cambaceres
+    bay area (Beagle Channel, Tierra del Fuego, Argentina) previous to the
+    arrival of European expeditions. Functions for cost-based analysis of
+    settlement clustering are included. Two vignettes are included to reproduce
+    results from Negre et al. (2017).
+License: GPL (>= 3)
+LazyData: TRUE
+Encoding: UTF-8
+Imports:
+    dplyr,
+    geoRcb,
+    ggplot2,
+    raster,
+    tidyr,
+    sp,
+    spatstat,
+    viridis
+Suggests:
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+RoxygenNote: 5.0.1

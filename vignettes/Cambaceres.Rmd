@@ -1,0 +1,135 @@
+---
+title: "Cost-based cluster analysis of Cambaceres settlements"
+author: "Facundo Muñoz"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Cambaceres}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, message = FALSE, warning = FALSE}
+require(tidyr)
+require(dplyr)
+require(raster)
+require(geoRcb)
+require(sp)
+require(spatstat)
+require(ggplot2)
+require(viridis)
+require(cbK)
+theme_set(theme_bw())
+```
+
+
+
+## Exploration
+
+
+```{r read-raster, include = FALSE}
+## The locations are LazyLoaded with the package
+## If you had yourself a shapefile, for example, you 
+## would do something like
+# basename <- "indigenous_settlements"
+# pts <- rgdal::readOGR(dsn = path, layer = basename)
+
+## The cost surface is provided with the package as a
+## separate raster file
+dn <- system.file("extdata", package="cbK")
+cambaceres_cs <- raster(file.path(dn, "cambaceres_cs"))
+```
+
+
+There seem to be some pixels with outlying cost values (an order of magnitude 
+higher). These have been filtered in the surface plot.
+
+```{r exploration, fig.width = 5}
+boxplot(getValues(cambaceres_cs), horizontal = TRUE)
+```
+
+
+```{r cost-surface-plot, fig.width = 6, fig.height = 4}
+data.frame(
+  coordinates(cambaceres_cs),
+  cost = getValues(cambaceres_cs)
+) %>% 
+  ggplot(aes(x, y)) +
+  geom_raster(aes(fill = cost)) +
+  geom_point(
+    data = as.data.frame(indigenous_settlements),
+    aes(coords.x1, coords.x2)) +
+  scale_fill_viridis() +
+  coord_fixed()
+
+```
+
+
+## Cost-based clustering calculations
+
+```{r cbK-results}
+res <- cbK(
+  loc = indigenous_settlements,
+  cs  = cambaceres_cs,
+  directions = 16
+)
+```
+
+
+
+## Multi-Dimensional Scaling
+
+In this case, the 2D MDS representation captures the `r round(res$mds$GOF[1]*100, 1)`
+ % of the variability in the cost-based distances.
+ 
+
+## Ripley's $K$ function
+
+```{r ripleys-k, fig.width=5, fig.height=5}
+plot(res$K)
+plot(res$env_K)
+```
+
+
+Or, its stabilized transformation: the $L$ function
+
+```{r L-function, fig.width=5, fig.height=5}
+plot(res$L)
+plot(res$env_L)
+```
+
+
+
+## Comparison with Euclidean distances
+
+The cost-based distances are an order of magnitude higher than the
+Euclidean distances.
+
+```{r dist-compare, fig.width=5, fig.height=5}
+data.frame(
+  eucl = unclass(res$eucl$dm),
+  cb = res$dm[lower.tri(res$dm)]
+) %>% 
+  ggplot(aes(eucl, cb)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, col = 'darkgray')
+```
+
+
+For reference, we have also computed $K$ and $L$ functions with euclidean coordinates.
+
+```{r euclidean-K-L, fig.width=5, fig.height=5}
+plot(res$eucl$K)
+plot(res$eucl$env_K)
+
+plot(res$eucl$L)
+plot(res$eucl$env_L)
+
+```
+
+
+
+## Conclusions from Cabaceres case study
+
+- The cost-based approach reveals a strong depart from homogeneity
+
